@@ -380,6 +380,10 @@ public:
 
 	UnicornEmu& write(uint64_t addr, const void* data, size_t size) {
 		uc_err err = uc_mem_write(uc_, addr, data, size);
+		if (err != UC_ERR_OK)
+		{
+			int k = 0;
+		}
 		return *this;
 	}
 

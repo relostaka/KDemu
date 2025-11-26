@@ -814,30 +814,34 @@ void PEloader::LoadModule(const std::string path, int type) {
 	}
 	if (path == "ntoskrnl.exe")
 	{
-		peBinary->optional_header().imagebase(0xfffff80507e17000);
+		auto ModuleName = g_Debugger->GetModule("nt");
+		peBinary->optional_header().imagebase(ModuleName->BaseAddress);
 		pe->Base = peBinary->imagebase();
 	}
 
 	if (path == "CI.dll")
 	{
-		peBinary->optional_header().imagebase(0xfffff80509550000);
+		auto ModuleName = g_Debugger->GetModule("CI");
+		peBinary->optional_header().imagebase(ModuleName->BaseAddress);
 		pe->Base = peBinary->imagebase();
 	}
 
 	if (path == "cng.sys")
 	{
-		peBinary->optional_header().imagebase(0xfffff80509640000);
+		auto ModuleName = g_Debugger->GetModule("cng");
+		peBinary->optional_header().imagebase(ModuleName->BaseAddress);
 		pe->Base = peBinary->imagebase();
 	}
 
 	if (path == "ntoskrnl.exe" || path == "CI.dll" || path == "cng.sys") {
 
-		Emu(uc)->alloc(peBinary->virtual_size(), pe->Base);
+		uint64_t vsize = peBinary->virtual_size();
+		Emu(uc)->alloc(vsize, pe->Base);
 		Emu(uc)->write(pe->Base, pe->memMap, peHeaderSize);
 		pe->Entry = pe->Base + peBinary->optional_header().addressof_entrypoint();
 		pe->End = pe->Base + peBinary->virtual_size();
 		peFiles.push_back(pe);
-		uint64_t vsize = peBinary->virtual_size();
+		
 
 		for (const auto& section : peSections) {
 			uint64_t sectionAddress = pe->Base + section.virtual_address();
@@ -850,15 +854,16 @@ void PEloader::LoadModule(const std::string path, int type) {
 			uint64_t PsLoadedModuleList = this->PsLoadedModuleListBase;
 			Emu(uc)->write(this->PsLoadedModuleListBase, &PsLoadedModuleList, sizeof(PsLoadedModuleList));
 		}
-		int k = (pe->End - pe->Base) / 0x1000;
+		int k = vsize / 0x1000;//(pe->End - pe->Base) / 0x1000;
 		for (int i = 0; i < k; i++) {
-			auto page = kdmp.GetVirtualPage(pe->Base + i * 0x1000);
+			uint64_t check = pe->Base + i * 0x1000;
+			auto page = kdmp.GetVirtualPage(check);
 			if (page != NULL) {
-				Emu(uc)->write(pe->Base + i * 0x1000, kdmp.GetVirtualPage(pe->Base + i * 0x1000), 0x1000);
+				Emu(uc)->write(check, kdmp.GetVirtualPage(check), 0x1000);
 			}
-			// else
-				// Logger::Log(true, ConsoleColor::RED, "Page error : %llx\n", pe->Base + i * 0x1000);
 		}
+
+
 	}
 	else {
 		return;
