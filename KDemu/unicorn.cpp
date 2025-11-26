@@ -4,6 +4,7 @@
 #include "LoadPE.hpp"
 #include "UnicornEmu.hpp"
 #include "NtType.hpp"
+#include "capstone/capstone.h"
 #define MAX_INSTRUCTION_SIZE 16
 
 PEloader* Unicorn::loader = &PEloader::GetInstance();
@@ -12,10 +13,10 @@ uint64_t Previous_address = 0;
 
 namespace {
 	constexpr size_t kPageSize = 0x1000;
-	inline bool match(const uint8_t* buf, uint32_t size, std::initializer_list<uint8_t> pattern) {
-		if (size < pattern.size()) return false;
-		return !std::memcmp(pattern.begin(), buf, pattern.size());
-	}
+		inline bool match(const uint8_t* buf, uint32_t size, std::initializer_list<uint8_t> pattern) {
+			if (size < pattern.size()) return false;
+			return !std::memcmp(pattern.begin(), buf, pattern.size());
+		}
 
 	inline int32_t read_disp32_at(const uint8_t* buf, uint32_t size, uint32_t offset) {
 		if (size < offset + 4) return 0;
@@ -47,7 +48,7 @@ void Unicorn::seh_Handle(uc_engine* uc)
 	emu->rcx(error);
 	emu->rsp(rsp);
 	emu->rip(loader->RtlRaiseStatusBase);
-	Sleep(10);
+	Sleep(1);
 }
 
 void Unicorn::register_hook(uc_engine* uc, uint64_t address, const byte size, void* user_data)
@@ -60,7 +61,7 @@ void Unicorn::register_hook(uc_engine* uc, uint64_t address, const byte size, vo
 			if (ti->threadId == GetCurrentThreadId() && loader->errorevent != ti->Event)
 			{
 				WaitForSingleObject(loader->errorevent, INFINITE);
-				Sleep(100);
+				Sleep(1);
 			}
 		}
 	}
@@ -139,7 +140,6 @@ void Unicorn::register_hook(uc_engine* uc, uint64_t address, const byte size, vo
 				uint64_t addr = address + 2;
 				emu->rip(addr);
 				Logger::Log(true, 12, "READ MSR: %llx\n", loader->MSRList[rcx].first);
-				Sleep(1000);
 			}
 			else {
 				seh_Handle(uc);
@@ -233,13 +233,44 @@ void Unicorn::catch_error(uc_engine* uc, int exception, void* user_data) {
 	PEloader* loader = &PEloader::GetInstance();
 	uint64_t rip;
 	uc_reg_read(uc, UC_X86_REG_RIP, &rip);
+
+	Logger::Log(true, ConsoleColor::DARK_GREEN, "exception # 0x%x \n", exception);
+	auto u = reinterpret_cast<my_UCstruct*>(uc);
+	auto cpu = reinterpret_cast<CPUState*>(u->cpu);
+	auto env = reinterpret_cast<CPUX86StateProbe*>(cpu->env_ptr);
+	env->old_exception = -1;
 	if (loader->peFiles[1]->Base < rip && loader->peFiles[1]->End > rip)
 	{
-		uc_hook t;
-		uc_hook_add(uc, &t, UC_HOOK_CODE, Unicorn::register_hook, NULL, rip, rip + 10);
+		uint8_t buf[15];
+		if (uc_mem_read(uc, rip, buf, sizeof(buf)) == UC_ERR_OK) {
+			csh h; cs_insn* insn;
+			cs_open(CS_ARCH_X86, CS_MODE_64, &h);
+			if (cs_disasm(h, buf, sizeof(buf), rip, 1, &insn) == 1) {
+				size_t size = insn[0].size; // ← 指令長度
+				std::vector<uint8_t> code = Emu(uc)->read(rip, size);
+				if (match(code.data(), size, { 0x48, 0xCF })) {
+					uc_hook t;
+					Logger::Log(true, 13, "IRET %llx\n", rip);
+
+					uint64_t old_rsp = Emu(uc)->rsp();
+					uint64_t old_cs = Emu(uc)->cs();
+
+					uint64_t new_rip = qword_load(uc, old_rsp + 0x00);
+					uint64_t new_cs = qword_load(uc, old_rsp + 0x08);
+					uint64_t new_fl = qword_load(uc, old_rsp + 0x10);
+					uint64_t new_rsp = qword_load(uc, old_rsp + 0x18);
+					uint64_t new_ss = qword_load(uc, old_rsp + 0x20);
+					Emu(uc)->eflags(new_fl);
+					Emu(uc)->cs(new_cs);
+					Emu(uc)->rsp(new_rsp);
+					Emu(uc)->rip(new_rip);
+				}
+				cs_free(insn, 1);
+			}
+			cs_close(&h);
+		}
 		return;
 	}
-	Logger::Log(true, ConsoleColor::DARK_GREEN, "exception # 0x%x \n", exception);
 	seh_Handle(uc);
 	return;
 	ShowRegister(uc);
@@ -359,11 +390,11 @@ bool Unicorn::hook_mem_invalid(uc_engine* uc, uc_mem_type type, uint64_t address
 			if (loader->errorevent != nullptr && loader->errorevent != ti->Event)
 			{
 				WaitForSingleObject(loader->errorevent, INFINITE);
-				Sleep(10);
+				Sleep(1);
 			}
 			loader->errorevent = ti->Event;
 			Previous_address = ti->paddress;
-			Sleep(10);
+			Sleep(1);
 		}
 	}
 

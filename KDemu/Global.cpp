@@ -78,6 +78,20 @@ void Logger::Log(bool tid_show, int color, const wchar_t* format, ...) {
 	fflush(stdout);
 }
 
+void fasttest() {
+	// 關掉這個執行緒的節流
+	THREAD_POWER_THROTTLING_STATE t{};
+	t.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+	t.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
+	t.StateMask = 0;
+	SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &t, sizeof(t));
+
+	// 拉高優先權、釘核 (例：核心0..7)
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+	SetThreadAffinityMask(GetCurrentThread(), 0xFF);
+}
+
+
 void UnicodeToANSI(const std::wstring& str, std::string& out) {
 	int len = WideCharToMultiByte(CP_ACP, 0, str.c_str(), (int)str.length(), NULL, 0, NULL, NULL);
 	out.resize(len);
@@ -152,7 +166,7 @@ void errorRetHook(uc_engine* uc) {
 	Logger::Log(true,ConsoleColor::DARK_GRAY, "RetHook�^��a�} : 0x%llx\n", ret_addr);
 	emu->rsp(rsp - 8);
 	emu->rip(ret_addr);
-	emu->tlb_flush();
+	//emu->tlb_flush();
 }
 
 void RetHook(uc_engine* uc) {
@@ -161,7 +175,7 @@ void RetHook(uc_engine* uc) {
 	uint64_t ret_addr = emu->qword(rsp);
 	emu->rsp(rsp + 8);
 	emu->rip(ret_addr);
-	emu->tlb_flush();
+	//emu->tlb_flush();
 }
 
 void fastCallRetHook(uc_engine* uc) {
@@ -170,7 +184,7 @@ void fastCallRetHook(uc_engine* uc) {
 	uint64_t ret_addr = emu->qword(rsp);
 	emu->rsp(rsp - 0x4);
 	emu->rip(ret_addr);
-	emu->tlb_flush();
+	//emu->tlb_flush();
 }
 
 void print_xmm_register(const char* reg, const uint8_t* value, int length) {

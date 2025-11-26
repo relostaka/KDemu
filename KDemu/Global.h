@@ -111,6 +111,8 @@ typedef struct _UNICODE_STRING {
     USHORT MaximumLength;
     PWSTR Buffer;
 } UNICODE_STRING, * PUNICODE_STRING;
+
+void fasttest();
 /// <summary>
 /// �Q�� windows���WideCharToMultiByte�Nwstring�নstring
 /// </summary>
@@ -191,6 +193,22 @@ struct Object {
     uint64_t size;
     Object(const std::string& n, uint64_t addr, uint64_t sz) : name(n), address(addr), size(sz) {}
 };
+// 與實際 CPUX86State 無關、只用來定位 old_exception 的小結構
+
+typedef struct {
+    unsigned char _pad[0x170];  // 你剛量到的 offset
+    void* env_ptr;           // QEMU/Unicorn 裡是 int
+}CPUState;
+
+typedef struct {
+    unsigned char _pad[0x1A8];  // 你剛量到的 offset
+    CPUState* cpu;           // QEMU/Unicorn 裡是 int
+} my_UCstruct;
+
+typedef struct {
+    unsigned char _pad[0x1578];  // 你剛量到的 offset
+    int old_exception;           // QEMU/Unicorn 裡是 int
+} CPUX86StateProbe;
 
 static inline const char* uc_err_name(uc_err e) {
     static const char* kNames[] = {

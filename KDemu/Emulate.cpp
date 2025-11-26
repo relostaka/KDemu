@@ -348,10 +348,10 @@ void Emulate::ExFreePool(uc_engine* uc, uint64_t address, uint32_t size, void* u
 			if (loader->errorevent != nullptr && loader->errorevent != ti->Event)
 			{
 				WaitForSingleObject(loader->errorevent, INFINITE);
-				Sleep(10);
+				Sleep(1);
 			}
 			loader->errorevent = ti->Event;
-			Sleep(10);
+			Sleep(1);
 		}
 	}
 
@@ -2427,10 +2427,10 @@ void Emulate::ZwFlushBuffersFile(uc_engine* uc, uint64_t address, uint32_t size,
 			if (loader->errorevent != nullptr && loader->errorevent != ti->Event)
 			{
 				WaitForSingleObject(loader->errorevent, INFINITE);
-				Sleep(10);
+				Sleep(1);
 			}
 			loader->errorevent = ti->Event;
-			Sleep(10);
+			Sleep(1);
 		}
 	}
 	Logger::Log(true, ConsoleColor::RED, "ZwFlushBuffersFile\n");
@@ -2736,6 +2736,7 @@ void Emulate::KeInitializeEvent(uc_engine* uc, uint64_t address, uint32_t size, 
 
 int iws = 0;
 void Emulate::TrampolineThread(ThreadInfo_t* ti) {
+	fasttest();
 	ti->threadId = GetCurrentThreadId();
 	for (auto& tii : loader->Threads) {
 		if (tii->threadId != ti->threadId) {
@@ -2777,6 +2778,7 @@ void Emulate::TrampolineThread(ThreadInfo_t* ti) {
 	uc_err errU = uc_hook_add(ti->tuc, &trace_mem, UC_HOOK_MEM_INVALID, (void*)Unicorn::hook_mem_invalid, NULL, 1, 0);
 	errU = uc_hook_add(ti->tuc, &trace_mem, UC_HOOK_INSN_INVALID, (void*)Unicorn::hook_mem_invalid, NULL, 1, 0);
 	errU = uc_hook_add(ti->tuc, &intr_hook, UC_HOOK_INTR, (void*)Unicorn::catch_error, nullptr, 1, 0);
+	uc_hook_add(ti->tuc, &t, UC_HOOK_CODE, Unicorn::register_hook, NULL, loader->peFiles[0]->Base, loader->peFiles[0]->End);
 	Unicorn _uc{};
 	for (const auto& pair : _uc.NtfuncMap) {
 		_uc.hook_File_func(ti->tuc, "t", pair.first, pair.second);
@@ -2793,7 +2795,6 @@ void Emulate::TrampolineThread(ThreadInfo_t* ti) {
 		uc_hook_add(ti->tuc, &t, UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, (void*)Unicorn::hook_access_object, (void*)object.get(), object->address, object->address + object->size);
 	}
 
-	uc_hook_add(ti->tuc, &t, UC_HOOK_CODE, Unicorn::register_hook, NULL, 1, 0);
 
 
 	uc_context_restore(ti->tuc, ti->uc_ctx);
@@ -3106,7 +3107,6 @@ void Emulate::PsTerminateSystemThread(uc_engine* uc, uint64_t address, uint32_t 
 	uint64_t exit_status = emu->rcx();
 
 	Logger::Log(true, ConsoleColor::RED, "PsTerminateSystemThread: ExitStatus: 0x%llx\n", exit_status);
-	Sleep(2000);
 	uc_emu_stop(uc);
 	return;
 	ThreadInfo_t* ti = loader->Threads.front();

@@ -521,7 +521,7 @@ public:
                     }
                     else if (ti->threadId == tid) {
                         loader->errorevent = ti->Event;
-                        Sleep(100);
+                        Sleep(1);
                     }
                 }
 
@@ -610,7 +610,6 @@ public:
                 }
                 return success ? alloc_addr : 0;
             }
-            Sleep(100);
         }
         return 0;
     }

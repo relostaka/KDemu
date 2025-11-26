@@ -29,6 +29,7 @@ void gdbServer(uc_engine* uc, uint64_t entry) {
 
 // MOD_TEST
 void mainThread() {
+	fasttest();
 	printf("Unicorn version: %x\n", uc_version(NULL, NULL));
 	PEloader& peLoader = PEloader::GetInstance();
 	UnicornEmu::open(&peLoader.uc);
@@ -49,7 +50,6 @@ void mainThread() {
 	ti->threadId = GetCurrentThreadId();
 	ti->tuc = uc;
 	uc_context_alloc(uc, &ti->uc_ctx);
-
 	ti->Event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 	peLoader.waitHandles.push_back(ti->Event);
 	ti->id = peLoader.Threads.size();
@@ -67,6 +67,7 @@ void mainThread() {
 	if (length > 0 && length < MAX_PATH)
 	{
 		vgk += "\\vgk_new.sys";
+		//vgk += "\\EasyAntiCheat_26aa6eb638137d17330be2df98352115.sys";
 		Logger::Log(true, ConsoleColor::DARK_GREEN, "Full path: %s \n", ntoskrnl2);
 	}
 	else {
@@ -98,6 +99,8 @@ void mainThread() {
 	Emu(uc)->hook_add(&trace_mem, UC_HOOK_MEM_INVALID, (void*)Unicorn::hook_mem_invalid, NULL, 1, 0);
 	Emu(uc)->hook_add(&trace_mem, UC_HOOK_INSN_INVALID, (void*)Unicorn::hook_mem_invalid, NULL, 1, 0);
 	Emu(uc)->hook_add(&intr_hook, UC_HOOK_INTR, (void*)Unicorn::catch_error, nullptr, 1, 0);
+	Emu(uc)->hook_add(&t, UC_HOOK_CODE, Unicorn::register_hook, NULL, peLoader.peFiles[0]->Base, peLoader.peFiles[0]->End);
+	//Emu(uc)->hook_add(&t, UC_HOOK_CODE, Unicorn::register_hook, NULL, 1,0);
 	for (const auto& pair : _uc.NtfuncMap) {
 		_uc.hook_File_func(uc, "t", pair.first, pair.second);
 	}
@@ -114,7 +117,7 @@ void mainThread() {
 		Emu(uc)->hook_add(&t, UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, (void*)Unicorn::hook_access_object, (void*)object.get(), object->address, object->address + object->size);
 	}
 
-	Emu(uc)->hook_add(&t, UC_HOOK_CODE, Unicorn::register_hook, NULL, 1, 0);
+	
 	bool KdDebuggerNotPresent = 1;
 	bool KdDebuggerEnabled = 0;
 	for (auto& peFile : peLoader.peFiles)
@@ -177,6 +180,17 @@ void mainThread() {
 }
 
 int main(int argc, char** argv, char** envp) {
+
+	// 行程級：一次就好
+	SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+
+	PROCESS_POWER_THROTTLING_STATE p{};
+	p.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+	p.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+	p.StateMask = 0; // 關節流
+	SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &p, sizeof(p));
+
+
 	PEloader& peLoader = PEloader::GetInstance();
 	if (!peLoader.LoadDmp()) {
 		Logger::Log(true, RED, "Failed to load dump file");
